@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snake Game with AI and Wall Portals</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        canvas {
+            background-color: #f0f0f0;
+            border: 1px solid #000;
+            margin-top: 20px;
+        }
+
+        .controls {
+            margin-top: 20px;
+        }
+
+        .controls input {
+            font-size: 16px;
+            padding: 5px;
+        }
+
+        .controls button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>Snake Game with AI and Wall Portals</h1>
+    <div class="controls">
+        <label for="speed">Set Speed (ms per frame): </label>
+        <input type="number" id="speed" min="50" max="500" value="100">
+        <button onclick="startGame()">Start Game</button>
+        <button onclick="toggleSelfCollision()">Toggle Self-Collision</button>
+        <button onclick="toggleGameMode()">Toggle AI / Player</button>
+    </div>
+    <canvas id="gameCanvas" width="400" height="400"></canvas>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        const gridSize = 20;
+        const canvasSize = 400;
+        const initialSnake = [{ x: 160, y: 160 }, { x: 140, y: 160 }, { x: 120, y: 160 }];
+        let snake = [...initialSnake];
+        let direction = "RIGHT";
+        let food = generateFood();
+        let gameOver = false;
+        let speed = 100; // Default speed value
+        let selfCollision = true; // Flag to toggle self-collision detection
+        let manualMode = true; // Flag to track if manual control is enabled
+        const directions = ["UP", "DOWN", "LEFT", "RIGHT"];
+        let gameInterval;
+
+        // Start the game with the given speed
+        function startGame() {
+            speed = parseInt(document.getElementById("speed").value);
+            if (gameInterval) clearInterval(gameInterval); // Clear previous game loop if any
+            snake = [...initialSnake]; // Reset snake
+            direction = "RIGHT";
+            food = generateFood(); // Reset food
+            gameOver = false; // Reset game over state
+            gameLoop();
+        }
+
+        // Toggle self-collision detection
+        function toggleSelfCollision() {
+            selfCollision = !selfCollision;
+            alert(selfCollision ? "Self-Collision Detection: ON" : "Self-Collision Detection: OFF");
+        }
+
+        // Toggle between AI and manual player control
+        function toggleGameMode() {
+            manualMode = !manualMode;
+            alert(manualMode ? "Manual Mode: Player Controls" : "AI Mode: AI Controls");
+            if (!manualMode) {
+                // If AI mode is enabled, start the game loop for AI
+                gameLoop();
+            }
+        }
+
+        // Listen for manual controls (arrow keys)
+        document.addEventListener("keydown", function(e) {
+            if (manualMode) {
+                if (e.key === "ArrowUp" && direction !== "DOWN") direction = "UP";
+                if (e.key === "ArrowDown" && direction !== "UP") direction = "DOWN";
+                if (e.key === "ArrowLeft" && direction !== "RIGHT") direction = "LEFT";
+                if (e.key === "ArrowRight" && direction !== "LEFT") direction = "RIGHT";
+            }
+        });
+
+        function gameLoop() {
+            if (gameOver) return alert("Game Over! Press F5 to restart.");
+            
+            gameInterval = setTimeout(() => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                moveSnake();
+                checkCollision();
+                drawSnake();
+                drawFood();
+
+                if (!manualMode) {
+                    // AI controls the snake when not in manual mode
+                    aiControl();
+                }
+
+                gameLoop();
+            }, speed);
+        }
+
+        function aiControl() {
+            const head = snake[0];
+            const possibleDirections = getPossibleDirections(head);
+
+            // Choose the best direction based on proximity to the food, avoiding self-collision and loops
+            const bestDirection = findBestDirection(possibleDirections, head);
+            if (bestDirection) {
+                direction = bestDirection;
+            }
+        }
+
+        function getPossibleDirections(head) {
+            const possibleDirections = [];
+
+            directions.forEach(dir => {
+                const newHead = moveInDirection(head, dir);
+                if (!isCollidingWithBody(newHead)) {
+                    possibleDirections.push(dir);
+                }
+            });
+
+            return possibleDirections;
+        }
+
+        function moveInDirection(head, dir) {
+            const newHead = { ...head };
+            if (dir === "RIGHT") newHead.x += gridSize;
+            if (dir === "LEFT") newHead.x -= gridSize;
+            if (dir === "UP") newHead.y -= gridSize;
+            if (dir === "DOWN") newHead.y += gridSize;
+            return newHead;
+        }
+
+        function isCollidingWithBody(newHead) {
+            if (!selfCollision) return false; // If self-collision is off, no collision occurs
+
+            for (let i = 1; i < snake.length; i++) {
+                if (newHead.x === snake[i].x && newHead.y === snake[i].y) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function findBestDirection(possibleDirections, head) {
+            let bestDirection = null;
+            let minDistance = Infinity;
+
+            possibleDirections.forEach(direction => {
+                const newHead = moveInDirection(head, direction);
+                const distanceToFood = Math.abs(newHead.x - food.x) + Math.abs(newHead.y - food.y);
+
+                // Avoid dead-ends or loops
+                if (isPathSafe(newHead, direction)) {
+                    if (distanceToFood < minDistance) {
+                        minDistance = distanceToFood;
+                        bestDirection = direction;
+                    }
+                }
+            });
+
+            return bestDirection;
+        }
+
+        function isPathSafe(newHead, direction) {
+            // Check for potential looping: if the snake tries to move into its body or near it
+            const snakeClone = [...snake];
+            const clonedHead = moveInDirection(newHead, direction);
+            snakeClone.unshift(clonedHead);
+
+            // Check if moving to this direction causes self-collision
+            return !isCollidingWithBody(clonedHead);
+        }
+
+        function moveSnake() {
+            let head = { ...snake[0] };
+
+            if (direction === "RIGHT") head.x += gridSize;
+            if (direction === "LEFT") head.x -= gridSize;
+            if (direction === "UP") head.y -= gridSize;
+            if (direction === "DOWN") head.y += gridSize;
+
+            // Wall wrap-around logic
+            if (head.x >= canvasSize) head.x = 0;
+            if (head.x < 0) head.x = canvasSize - gridSize;
+            if (head.y >= canvasSize) head.y = 0;
+            if (head.y < 0) head.y = canvasSize - gridSize;
+
+            snake.unshift(head);
+
+            if (head.x === food.x && head.y === food.y) {
+                food = generateFood();
+            } else {
+                snake.pop();
+            }
+        }
+
+        function checkCollision() {
+            const head = snake[0];
+
+            // No need to check for wall collisions as the snake wraps around
+            // Check if snake collides with itself if self-collision is enabled
+            if (selfCollision) {
+                for (let i = 1; i < snake.length; i++) {
+                    if (head.x === snake[i].x && head.y === snake[i].y) {
+                        gameOver = true;
+                    }
+                }
+            }
+        }
+
+        function drawSnake() {
+            snake.forEach(segment => {
+                ctx.fillStyle = "green";
+                ctx.fillRect(segment.x, segment.y, gridSize, gridSize);
+            });
+        }
+
+        function drawFood() {
+            ctx.fillStyle = "red";
+            ctx.fillRect(food.x, food.y, gridSize, gridSize);
+        }
+
+        function generateFood() {
+            const x = Math.floor(Math.random() * (canvasSize / gridSize)) * gridSize;
+            const y = Math.floor(Math.random() * (canvasSize / gridSize)) * gridSize;
+            return { x, y };
+        }
+    </script>
+</body>
+</html>
+
